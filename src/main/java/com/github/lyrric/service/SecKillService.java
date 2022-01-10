@@ -44,8 +44,11 @@ public class SecKillService {
     public void startSecKill(Integer vaccineId, String startDateStr, MainFrame mainFrame) throws ParseException, InterruptedException {
         long startDate = convertDateToInt(startDateStr);
         long now = System.currentTimeMillis();
+        String msg="";
         if(now + 5000 < startDate){
-            logger.info("还未到开始时间，等待中......");
+            msg="还未到开始时间，等待中......";
+            logger.info(msg);
+            mainFrame.appendMsg(msg);
             Thread.sleep(startDate - now - 5000);
         }
         String orderId = null;
@@ -55,34 +58,46 @@ public class SecKillService {
                 httpService.log(vaccineId.toString());
                 break;
             }catch (Exception e){
-                logger.warn("httpService.log,未知异常:{}，", e.getMessage());
+                msg=String.format("httpService.log,未知异常:%s，",e.getMessage());
+                logger.warn(msg);
+                mainFrame.appendMsg(msg);
             }
         }while (true);
         boolean isStUsed = true;
         now = System.currentTimeMillis();
         if(now + 1000 < startDate){
+            msg="还未到获取st时间，等待中......";
             logger.info("还未到获取st时间，等待中......");
+            mainFrame.appendMsg(msg);
             Thread.sleep(startDate - now - 1000);
         }
         do {
             try {
                 st = httpService.getSt(vaccineId.toString());
                 isStUsed = false;
-                logger.info("成功获取到st");
+                msg="成功获取到st";
+                logger.info(msg);
+                mainFrame.appendMsg(msg);
                 break;
             }catch (Exception e){
+                msg=String.format("获取st失败,未知异常:%s，", e.getMessage());
                 logger.warn("获取st失败,未知异常:{}，", e.getMessage());
+                mainFrame.appendMsg(msg);
             }
         }while (true);
         if(now + 500 < startDate){
+            msg="还未到获取开始秒杀时间，等待中......";
             logger.info("还未到获取开始秒杀时间，等待中......");
+            mainFrame.appendMsg(msg);
             Thread.sleep(startDate - now - 500);
         }
         do {
             try {
                 //1.直接秒杀、获取秒杀资格
                 long id = Thread.currentThread().getId();
-                logger.info("Thread ID：{}，发送请求", id);
+                msg=String.format("Thread ID：%s，发送请求",id);
+                logger.info(msg);
+                mainFrame.appendMsg(msg);
                 //加密参数
                 if(isStUsed){
                     st = httpService.getSt(vaccineId.toString());
@@ -90,11 +105,15 @@ public class SecKillService {
                 }
                 orderId = httpService.secKill(vaccineId.toString(), "1", Config.memberId.toString(),
                         Config.idCard, st);
-                logger.info("Thread ID：{}，抢购成功", id);
+                msg=String.format("Thread ID：%s，抢购成功",id);
+                logger.info(msg);
+                mainFrame.appendMsg(msg);
                 break;
             } catch (BusinessException e) {
                 isStUsed = true;
-                logger.info("Thread ID: {}, 抢购失败: {}",Thread.currentThread().getId(), e.getErrMsg());
+                msg=String.format("Thread ID: %s, 抢购失败: %s",Thread.currentThread().getId(),e.getErrMsg());
+                logger.info(msg);
+                mainFrame.appendMsg(msg);
                 //如果离开始时间XX秒后，则不再继续
                 if (System.currentTimeMillis() > startDate + 1000 * 60 * 20) {
                     break;
@@ -103,10 +122,14 @@ public class SecKillService {
                     break;
                 }
             }catch (ConnectTimeoutException | SocketTimeoutException socketTimeoutException ){
-                logger.error("Thread ID: {},抢购失败: 超时了", Thread.currentThread().getId());
+                msg=String.format("Thread ID: %s,抢购失败: 超时了",Thread.currentThread().getId());
+                logger.error(msg);
+                mainFrame.appendMsg(msg);
             } catch (Exception e) {
                 e.printStackTrace();
-                logger.warn("Thread ID: {}，未知异常", Thread.currentThread().getId());
+                msg=String.format("Thread ID: %s，未知异常",Thread.currentThread().getId());
+                logger.warn(msg);
+                mainFrame.appendMsg(msg);
             }
         } while (true);
 

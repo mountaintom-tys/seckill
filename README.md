@@ -15,11 +15,11 @@
 - 2020.07.24 更新至V0.9版本，目前还差秒杀结果未展示
 ## 界面
 ### 主界面
-![markdown](https://raw.githubusercontent.com/lyrric/seckill/master/images/main.jpg "主界面图")
+![markdown](./images/main.jpg "主界面图")
 ### 设置抓包数据
-![markdown](https://raw.githubusercontent.com/lyrric/seckill/master/images/header.jpg "设置抓包数据")
+![markdown](./images/header.jpg "设置抓包数据")
 ### 成员选择
-![markdown](https://raw.githubusercontent.com/lyrric/seckill/master/images/mamber.jpg "成员选择")
+![markdown](./images/mamber.jpg "成员选择")
 
 ## 描述
 

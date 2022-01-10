@@ -49,4 +49,6 @@ public class Config {
      */
     public static Map<String, String> cookie = new HashMap<>();
 
+    public static boolean autoDetect;
+
 }

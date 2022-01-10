@@ -1,10 +1,12 @@
 package com.github.lyrric.ui;
 
+import cn.hutool.extra.mail.MailUtil;
 import com.github.lyrric.conf.Config;
 import com.github.lyrric.model.Area;
 import com.github.lyrric.model.BusinessException;
 import com.github.lyrric.model.TableModel;
 import com.github.lyrric.model.VaccineList;
+import com.github.lyrric.service.RefreshVaccinesTask;
 import com.github.lyrric.service.SecKillService;
 import com.github.lyrric.util.ParseUtil;
 import org.apache.commons.lang3.StringUtils;
@@ -16,7 +18,11 @@ import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.io.IOException;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Timer;
+import java.util.stream.Collectors;
 
 /**
  * Created on 2020-07-21.
@@ -30,6 +36,12 @@ public class MainFrame extends JFrame {
      * 疫苗列表
      */
     private List<VaccineList> vaccines;
+
+    JButton autoDetectBtn;
+
+    JTextField detectPeriodBox;
+
+    Timer timer;
 
     JButton startBtn;
 
@@ -49,6 +61,8 @@ public class MainFrame extends JFrame {
 
     JComboBox<Area> cityBox;
 
+    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+
 
     public MainFrame() {
         setLayout(null);
@@ -62,6 +76,13 @@ public class MainFrame extends JFrame {
     }
 
     private void init(){
+        detectPeriodBox = new JTextField();
+        detectPeriodBox.setEditable(false); // 设置输入框允许编辑
+        detectPeriodBox.setColumns(4); // 设置输入框的长度为11个字符
+
+        autoDetectBtn = new JButton("开启自动检测");
+        autoDetectBtn.setEnabled(false);
+        autoDetectBtn.addActionListener(e->toggleAutoDetect());
         startBtn = new JButton("开始");
         startBtn.setEnabled(false);
         startBtn.addActionListener(e -> start());
@@ -74,6 +95,8 @@ public class MainFrame extends JFrame {
             dialog.setVisible(true);
             if(dialog.success()){
                 setMemberBtn.setEnabled(true);
+                autoDetectBtn.setEnabled(true);
+                detectPeriodBox.setEditable(true);
                 startBtn.setEnabled(true);
                 refreshBtn.setEnabled(true);
                 appendMsg("设置cookie成功");
@@ -140,7 +163,11 @@ public class MainFrame extends JFrame {
             Config.regionCode = selectedItem.getValue();
             appendMsg("已选择地区:"+selectedItem.getName());
         });
-        setAreaBtn.setBounds(220, 270, 80, 30);
+        setAreaBtn.setBounds(220, 270, 70, 30);
+
+        autoDetectBtn.setBounds(300,270,120,30);
+
+        detectPeriodBox.setBounds(425,270,50,30);
 
         scrollPane.setBounds(10,10,460,200);
 
@@ -161,30 +188,62 @@ public class MainFrame extends JFrame {
         add(provinceBox);
         add(cityBox);
         add(setAreaBtn);
+        add(autoDetectBtn);
+        add(detectPeriodBox);
     }
 
 
 
-    private void refreshVaccines(){
-        try {
-            vaccines = service.getVaccines();
-            //清除表格数据
-            //通知模型更新
-            ((DefaultTableModel)vaccinesTable.getModel()).getDataVector().clear();
-            ((DefaultTableModel)vaccinesTable.getModel()).fireTableDataChanged();
-            vaccinesTable.updateUI();//刷新表
-            if(vaccines != null && !vaccines.isEmpty()){
-                for (VaccineList t : vaccines) {
-                    String[] item = { t.getId().toString(), t.getVaccineName(),t.getName() ,t.getStartTime()};
-                    tableModel.addRow(item);
-
+    public void refreshVaccines(){
+            try {
+                int originNum = vaccines == null ? 0 : vaccines.size();
+                vaccines = service.getVaccines();
+                //清除表格数据
+                //通知模型更新
+                ((DefaultTableModel)vaccinesTable.getModel()).getDataVector().clear();
+                ((DefaultTableModel)vaccinesTable.getModel()).fireTableDataChanged();
+                vaccinesTable.updateUI();//刷新表
+                if(vaccines != null && !vaccines.isEmpty()){
+                    for (VaccineList t : vaccines) {
+                        String[] item = { t.getId().toString(), t.getVaccineName(),t.getName() ,t.getStartTime()};
+                        tableModel.addRow(item);
+                    }
+                    if(Config.autoDetect && vaccines.size()>originNum){//只有开启自动检测并且有新疫苗活动才会弹出提醒，并发邮件通知
+                        MailUtil.sendText("*******","九价疫苗秒苗通知！","秒苗列表有新抢购活动啦，冲冲冲啊！");
+                        JOptionPane.showMessageDialog(null,"查询到最新疫苗！");
+//                        turnOffAutoDetect();
+                    }
                 }
+            } catch (IOException e) {
+                e.printStackTrace();
+                appendMsg("未知错误");
+            } catch (BusinessException e) {
+                appendMsg("错误："+e.getErrMsg()+"，errCode"+e.getCode());
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            appendMsg("未知错误");
-        } catch (BusinessException e) {
-            appendMsg("错误："+e.getErrMsg()+"，errCode"+e.getCode());
+    }
+    public void turnOffAutoDetect(){
+        timer.cancel();
+        Config.autoDetect=false;
+        autoDetectBtn.setText("开启自动检测");
+    }
+    private void toggleAutoDetect(){
+        if(Config.autoDetect){
+            turnOffAutoDetect();
+        }else{
+            String periodText=detectPeriodBox.getText();
+            if(StringUtils.isBlank(periodText)){
+                JOptionPane.showMessageDialog(null,"请先设置自动检测间隔时间！单位:分");
+                return;
+            }
+            try {
+                Double period = Double.valueOf(periodText)*60*1000;
+                timer = new Timer();
+                timer.scheduleAtFixedRate(new RefreshVaccinesTask(this),new Date(),period.longValue());
+                Config.autoDetect=true;
+                autoDetectBtn.setText("关闭自动检测");
+            } catch (NumberFormatException e) {
+                appendMsg("错误：数字格式化异常");
+            }
         }
     }
     private void start(){
