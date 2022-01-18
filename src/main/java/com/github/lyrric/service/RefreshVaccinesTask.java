@@ -18,6 +18,7 @@ import java.util.TimerTask;
 
 public class RefreshVaccinesTask extends TimerTask {
     private MainFrame mainFrame;
+    public static boolean membersOverdue = false;
 
     public RefreshVaccinesTask() {
     }
@@ -30,14 +31,19 @@ public class RefreshVaccinesTask extends TimerTask {
     public void run() {
         System.out.println("RefreshVaccinesTask execute at :"+new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(this.scheduledExecutionTime()));
         mainFrame.refreshVaccines();
-        //定时刷新成员信息防过期
-        try {
-            new HttpService().getMembers();
-        } catch (Exception e) {
-            String msg = "刷新成员信息："+e.getMessage();
-            System.out.println(msg);
-            mainFrame.appendMsg(msg);
-            MailUtil.sendText("*******","秒苗刷新成员信息异常通知！",msg);
+        //定时刷新成员信息检测是否过期
+        if(!membersOverdue){
+            try {
+                List<Member> members = new HttpService().getMembers();
+                System.out.println("refresh members:"+members.toString());
+                mainFrame.appendMsg("refresh members:"+members.toString());
+            } catch (Exception e) {
+                String msg = "刷新成员信息："+e.getMessage();
+                System.out.println(msg);
+                mainFrame.appendMsg(msg);
+                MailUtil.sendText(Config.mailTo,"秒苗刷新成员信息异常通知！",msg);
+                membersOverdue = true;
+            }
         }
     }
 }

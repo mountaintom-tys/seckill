@@ -1,5 +1,7 @@
 package com.github.lyrric.model;
 
+import java.util.Objects;
+
 /**
  * Created on 2020-07-23.
  * 疫苗列表
@@ -75,5 +77,23 @@ public class VaccineList {
 
     public void setVaccineName(String vaccineName) {
         this.vaccineName = vaccineName;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        VaccineList that = (VaccineList) o;
+        return Objects.equals(id, that.id) &&
+                Objects.equals(name, that.name) &&
+                Objects.equals(address, that.address) &&
+                Objects.equals(vaccineCode, that.vaccineCode) &&
+                Objects.equals(vaccineName, that.vaccineName) &&
+                Objects.equals(startTime, that.startTime);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, name, address, vaccineCode, vaccineName, startTime);
     }
 }

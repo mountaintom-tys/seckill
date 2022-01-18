@@ -8,6 +8,8 @@ import com.github.lyrric.model.TableModel;
 import com.github.lyrric.model.VaccineList;
 import com.github.lyrric.service.RefreshVaccinesTask;
 import com.github.lyrric.service.SecKillService;
+import com.github.lyrric.service.SeckillServiceTask;
+import com.github.lyrric.util.CompareUtil;
 import com.github.lyrric.util.ParseUtil;
 import org.apache.commons.lang3.StringUtils;
 
@@ -19,7 +21,7 @@ import java.awt.event.ItemListener;
 import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.util.*;
 import java.util.List;
 import java.util.Timer;
 import java.util.stream.Collectors;
@@ -36,6 +38,11 @@ public class MainFrame extends JFrame {
      * 疫苗列表
      */
     private List<VaccineList> vaccines;
+
+    //秒杀列表
+    private List<VaccineList> preVaccines = new ArrayList<>();
+
+    private List<Timer> seckillTimerList = new ArrayList<>();
 
     JButton autoDetectBtn;
 
@@ -61,7 +68,7 @@ public class MainFrame extends JFrame {
 
     JComboBox<Area> cityBox;
 
-    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
 
     public MainFrame() {
@@ -85,7 +92,7 @@ public class MainFrame extends JFrame {
         autoDetectBtn.addActionListener(e->toggleAutoDetect());
         startBtn = new JButton("开始");
         startBtn.setEnabled(false);
-        startBtn.addActionListener(e -> start());
+        startBtn.addActionListener(e -> startClick());
 
         setCookieBtn = new JButton("设置Cookie");
         setCookieBtn.addActionListener((e)->{
@@ -197,7 +204,9 @@ public class MainFrame extends JFrame {
     public void refreshVaccines(){
             try {
                 int originNum = vaccines == null ? 0 : vaccines.size();
-                vaccines = service.getVaccines();
+                vaccines = service.getVaccines().stream().sorted(new CompareUtil<>(this)).collect(Collectors.toList());
+                System.out.println(vaccines.toString());
+                appendMsg("refresh vaccines:"+vaccines.toString());
                 //清除表格数据
                 //通知模型更新
                 ((DefaultTableModel)vaccinesTable.getModel()).getDataVector().clear();
@@ -208,21 +217,51 @@ public class MainFrame extends JFrame {
                         String[] item = { t.getId().toString(), t.getVaccineName(),t.getName() ,t.getStartTime()};
                         tableModel.addRow(item);
                     }
-                    if(Config.autoDetect && vaccines.size()>originNum){//只有开启自动检测并且有新疫苗活动才会弹出提醒，并发邮件通知
-                        MailUtil.sendText("*******","九价疫苗秒苗通知！","秒苗列表有新抢购活动啦，冲冲冲啊！");
-                        JOptionPane.showMessageDialog(null,"查询到最新疫苗！");
+                    if(Config.autoDetect && vaccines.size()>originNum){//只有开启自动检测并且有新疫苗活动且未过期才会设置自动定时抢购，并发邮件通知
+                        List<VaccineList> tmpVaccines = new ArrayList<>();
+                        tmpVaccines.addAll(vaccines);
+                        tmpVaccines.removeAll(preVaccines);//找出新增的疫苗
+                        //为新查询到的疫苗设置定时自动抢购
+                        for (VaccineList tmpVaccine : tmpVaccines) {
+                            //只有还未过期的疫苗才会设置自动抢购
+                            if(sdf.parse(tmpVaccine.getStartTime()).after(new Date())){
+                                Timer seckillTimer = new Timer();
+                                Date startTime = sdf.parse(tmpVaccine.getStartTime());
+                                //定时程序设置为提前500毫秒开始抢购
+                                Date preStartTime = new Date(startTime.getTime()-500);
+                                seckillTimer.schedule(new SeckillServiceTask(this,tmpVaccine.getId(),tmpVaccine.getStartTime()),preStartTime);
+                                seckillTimerList.add(seckillTimer);
+                                MailUtil.sendText(Config.mailTo,"九价疫苗秒苗通知！","秒苗列表有新抢购活动啦，冲冲冲啊！");
+                            }
+                        }
+//                        JOptionPane.showMessageDialog(null,"查询到最新疫苗！");
 //                        turnOffAutoDetect();
                     }
                 }
+                preVaccines = vaccines;
             } catch (IOException e) {
                 e.printStackTrace();
-                appendMsg("未知错误");
+                String msg ="refreshVaccines():未知错误";
+                appendMsg(msg);
+                MailUtil.sendText(Config.mailTo,"秒苗seckill异常通知",msg);
             } catch (BusinessException e) {
-                appendMsg("错误："+e.getErrMsg()+"，errCode"+e.getCode());
+                String msg = "refreshVaccines():错误："+e.getErrMsg()+"，errCode"+e.getCode();
+                appendMsg(msg);
+                MailUtil.sendText(Config.mailTo,"秒苗seckill异常通知",msg);
+            }catch (ParseException e){
+                String msg = "refreshVaccines():日期解析异常！";
+                appendMsg(msg);
+                MailUtil.sendText(Config.mailTo,"秒苗seckill异常通知",msg);
             }
     }
     public void turnOffAutoDetect(){
+        //取消自动刷新定时器
         timer.cancel();
+        //取消所有自动抢购定时器
+        for (Timer seckillTimer : seckillTimerList) {
+            seckillTimer.cancel();
+        }
+        seckillTimerList.clear();
         Config.autoDetect=false;
         autoDetectBtn.setText("开启自动检测");
     }
@@ -236,6 +275,10 @@ public class MainFrame extends JFrame {
                 return;
             }
             try {
+                if(vaccines!=null&&preVaccines!=null){
+                    vaccines.clear();
+                    preVaccines.clear();
+                }
                 Double period = Double.valueOf(periodText)*60*1000;
                 timer = new Timer();
                 timer.scheduleAtFixedRate(new RefreshVaccinesTask(this),new Date(),period.longValue());
@@ -246,7 +289,7 @@ public class MainFrame extends JFrame {
             }
         }
     }
-    private void start(){
+    public void startClick(){
         if(Config.cookie.isEmpty()){
             appendMsg("请配置cookie!!!");
             return ;
@@ -255,10 +298,12 @@ public class MainFrame extends JFrame {
             appendMsg("请选择要抢购的疫苗");
             return ;
         }
-
         int selectedRow = vaccinesTable.getSelectedRow();
         Integer id = vaccines.get(selectedRow).getId();
         String startTime = vaccines.get(selectedRow).getStartTime();
+        start(id,startTime);
+    }
+    public void start(Integer id,String startTime){
         new Thread(()->{
             try {
                 setCookieBtn.setEnabled(false);
@@ -267,6 +312,7 @@ public class MainFrame extends JFrame {
                 service.startSecKill(id, startTime, this);
             } catch (ParseException | InterruptedException e) {
                 appendMsg("解析开始时间失败");
+                MailUtil.sendText(Config.mailTo,"秒苗seckill异常通知","start() 解析开始时间失败");
                 e.printStackTrace();
             }finally {
                 setCookieBtn.setEnabled(true);

@@ -1,5 +1,6 @@
 package com.github.lyrric.conf;
 
+import cn.hutool.setting.Setting;
 import com.github.lyrric.model.Member;
 
 import java.util.HashMap;
@@ -50,5 +51,7 @@ public class Config {
     public static Map<String, String> cookie = new HashMap<>();
 
     public static boolean autoDetect;
+
+    public static String mailTo=new Setting("./config/mail.setting").get("to");
 
 }

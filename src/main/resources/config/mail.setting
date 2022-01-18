@@ -10,3 +10,5 @@ user=******
 pass=******
 #使用STARTTLS安全连接
 startttlsEnable=true
+
+to=**********

@@ -6,6 +6,7 @@ import com.github.lyrric.model.BusinessException;
 import com.github.lyrric.model.Member;
 import com.github.lyrric.model.TableModel;
 import com.github.lyrric.service.HttpService;
+import com.github.lyrric.service.RefreshVaccinesTask;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -61,6 +62,7 @@ public class MemberDialog extends JDialog {
         new Thread(()->{
             try {
                 List<Member> members = new HttpService().getMembers();
+                RefreshVaccinesTask.membersOverdue=false;
                 setTitle("请选择成员");
                 table.removeAll();
                 if(members.isEmpty()){

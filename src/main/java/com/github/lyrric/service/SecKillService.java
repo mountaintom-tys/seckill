@@ -1,5 +1,6 @@
 package com.github.lyrric.service;
 
+import cn.hutool.extra.mail.MailUtil;
 import com.github.lyrric.conf.Config;
 import com.github.lyrric.model.BusinessException;
 import com.github.lyrric.model.VaccineList;
@@ -44,9 +45,11 @@ public class SecKillService {
     public void startSecKill(Integer vaccineId, String startDateStr, MainFrame mainFrame) throws ParseException, InterruptedException {
         long startDate = convertDateToInt(startDateStr);
         long now = System.currentTimeMillis();
+        String allMsg="秒杀开启==>vaccineId："+vaccineId+"\n";
         String msg="";
         if(now + 5000 < startDate){
             msg="还未到开始时间，等待中......";
+            allMsg += msg+"\n";
             logger.info(msg);
             mainFrame.appendMsg(msg);
             Thread.sleep(startDate - now - 5000);
@@ -59,6 +62,7 @@ public class SecKillService {
                 break;
             }catch (Exception e){
                 msg=String.format("httpService.log,未知异常:%s，",e.getMessage());
+                allMsg += msg+"\n";
                 logger.warn(msg);
                 mainFrame.appendMsg(msg);
             }
@@ -67,6 +71,7 @@ public class SecKillService {
         now = System.currentTimeMillis();
         if(now + 1000 < startDate){
             msg="还未到获取st时间，等待中......";
+            allMsg += msg+"\n";
             logger.info("还未到获取st时间，等待中......");
             mainFrame.appendMsg(msg);
             Thread.sleep(startDate - now - 1000);
@@ -76,17 +81,20 @@ public class SecKillService {
                 st = httpService.getSt(vaccineId.toString());
                 isStUsed = false;
                 msg="成功获取到st";
+                allMsg += msg+"\n";
                 logger.info(msg);
                 mainFrame.appendMsg(msg);
                 break;
             }catch (Exception e){
                 msg=String.format("获取st失败,未知异常:%s，", e.getMessage());
+                allMsg += msg+"\n";
                 logger.warn("获取st失败,未知异常:{}，", e.getMessage());
                 mainFrame.appendMsg(msg);
             }
         }while (true);
         if(now + 500 < startDate){
             msg="还未到获取开始秒杀时间，等待中......";
+            allMsg += msg+"\n";
             logger.info("还未到获取开始秒杀时间，等待中......");
             mainFrame.appendMsg(msg);
             Thread.sleep(startDate - now - 500);
@@ -96,6 +104,7 @@ public class SecKillService {
                 //1.直接秒杀、获取秒杀资格
                 long id = Thread.currentThread().getId();
                 msg=String.format("Thread ID：%s，发送请求",id);
+                allMsg += msg+"\n";
                 logger.info(msg);
                 mainFrame.appendMsg(msg);
                 //加密参数
@@ -106,12 +115,14 @@ public class SecKillService {
                 orderId = httpService.secKill(vaccineId.toString(), "1", Config.memberId.toString(),
                         Config.idCard, st);
                 msg=String.format("Thread ID：%s，抢购成功",id);
+                allMsg += msg+"\n";
                 logger.info(msg);
                 mainFrame.appendMsg(msg);
                 break;
             } catch (BusinessException e) {
                 isStUsed = true;
                 msg=String.format("Thread ID: %s, 抢购失败: %s",Thread.currentThread().getId(),e.getErrMsg());
+                allMsg += msg+"\n";
                 logger.info(msg);
                 mainFrame.appendMsg(msg);
                 //如果离开始时间XX秒后，则不再继续
@@ -122,12 +133,14 @@ public class SecKillService {
                     break;
                 }
             }catch (ConnectTimeoutException | SocketTimeoutException socketTimeoutException ){
-                msg=String.format("Thread ID: %s,抢购失败: 超时了",Thread.currentThread().getId());
+                msg=String.format("Thread ID: %s,抢购失败: 超时了,%s",Thread.currentThread().getId(),socketTimeoutException.getMessage());
+                allMsg += msg+"\n";
                 logger.error(msg);
                 mainFrame.appendMsg(msg);
             } catch (Exception e) {
                 e.printStackTrace();
-                msg=String.format("Thread ID: %s，未知异常",Thread.currentThread().getId());
+                msg=String.format("Thread ID: %s，未知异常,%s",Thread.currentThread().getId(),e.getMessage());
+                allMsg += msg+"\n";
                 logger.warn(msg);
                 mainFrame.appendMsg(msg);
             }
@@ -136,15 +149,21 @@ public class SecKillService {
 
         //等待线程结束
         if (orderId != null) {
+            msg="抢购成功，请登录约苗小程序查看";
             if (mainFrame != null) {
-                mainFrame.appendMsg("抢购成功，请登录约苗小程序查看");
+                mainFrame.appendMsg(msg);
             }
-            logger.info("抢购成功，请登录约苗小程序查看");
+            allMsg += msg+"\n";
+            logger.info(msg);
+
         } else {
+            msg="抢购失败";
             if (mainFrame != null) {
-                mainFrame.appendMsg("抢购失败");
+                mainFrame.appendMsg(msg);
             }
+            allMsg += msg+"\n";
         }
+        MailUtil.sendText(Config.mailTo,"秒苗抢购结果报告！",allMsg);
 
     }
     public List<VaccineList> getVaccines() throws IOException, BusinessException {
